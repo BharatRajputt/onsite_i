@@ -14,7 +14,9 @@ const initialState = {
     { id: 'reports', label: 'Reports', icon: 'BarChart3', path: '/reports' },
     { id: 'chat-group', label: 'Chat Groups', icon: 'MessageCircle', path: '/chat' },
     { id: 'payroll', label: 'Payroll', icon: 'IdCard', path: '/payroll' },
-    { id: 'settings', label: 'Settings', icon: 'Settings', path: '/settings' }
+    { id: 'settings', label: 'Settings', icon: 'Settings', path: '/settings' },
+    { id: 'user-profile', label: 'User', icon: 'User', path: '/user-profile' }
+
   ]
 };
 

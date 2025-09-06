@@ -9,9 +9,10 @@ import timeSheetReducer from './timeSlice'
 import leadReducer from './leadSlice'
 import transactionOptions from "./transactionOptionSlice"
 import transactionFields from "./transactionField"
-
+import  {apiSlice}  from  "./api"
 export const store = configureStore({
   reducer: {
+    [apiSlice.reducerPath]:apiSlice.reducer,
     sidebar: sidebarReducer,
     projects:projectReducer,
     header:headerReducer,
@@ -23,4 +24,6 @@ export const store = configureStore({
     transactionOptions: transactionOptions,
     transactionFields: transactionFields,
   },
+  middleware:(getDefaultMiddleware)=>
+  getDefaultMiddleware().concat(apiSlice.middleware),
 });

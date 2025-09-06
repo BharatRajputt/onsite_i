@@ -18,15 +18,7 @@ export const formConfigs = {
         required: true,
         validation: { required: 'Party name is required' }
       },
-      {
-        name: 'phone',
-        label: 'PHONE',
-        type: 'tel',
-        placeholder: 'Phone',
-        required: true,
-        hasCountryCode: true,
-        validation: { required: 'Phone number is required' }
-      },
+     
       {
         name: 'email',
         label: 'EMAIL',
@@ -98,7 +90,6 @@ export const formConfigs = {
     ],
     defaultValues: {
       partyName: '',
-      phone: '',
       email: '',
       partyType: 'Material Supplier',
       openingBalance: 0,
@@ -125,7 +116,7 @@ export const formConfigs = {
         name: 'dueDate',
         label: 'DUE DATE',
         type: 'date',
-        defaultValue: '2025-08-15'
+        defaultValue: new Date().toISOString().split('T')[0]
       },
       {
         name: 'repeatTodo',
@@ -143,9 +134,8 @@ export const formConfigs = {
       {
         name: 'projectName',
         label: 'PROJECT NAME',
-        type: 'dropdown',
-        placeholder: 'Add Project',
-        options: ['Project A', 'Project B', 'Project C']
+        type: 'search',
+        placeholder: 'Search project...'
       },
       {
         name: 'taskName',
@@ -164,14 +154,13 @@ export const formConfigs = {
       {
         name: 'assigneeName',
         label: 'ASSIGNEE NAME',
-        type: 'dropdown',
-        placeholder: '+Add Assignee',
-        options: ['John Doe', 'Jane Smith', 'Mike Johnson']
+        type: 'search',
+        placeholder: 'Search assignee...'
       }
     ],
     defaultValues: {
       title: '',
-      dueDate: '2025-08-15',
+      dueDate: new Date().toISOString().split('T')[0],
       repeatTodo: '',
       type: '',
       projectName: '',
@@ -181,162 +170,163 @@ export const formConfigs = {
     }
   },
   
- [FORM_TYPES.TIMESHEET]: {
-  title: 'NEW TIMESHEET',
-  fields: [
-    {
-      name: 'date',
-      label: 'DATE',
-      type: 'date',
-      defaultValue: '2025-08-15'
-    },
-    {
-      name: 'partyName',
-      label: 'PARTY NAME',
-      type: 'search',
-      placeholder: 'Search party...',
-      required: true,
-      validation: { required: 'Party name is required' }
-    },
-    {
-      name: 'start',
-      label: 'START',
-      type: 'time',
-      placeholder: '--:-- --',
-      required: true,
-      validation: { required: 'Start time is required' }
-    },
-    {
-      name: 'stop',
-      label: 'STOP',
-      type: 'time',
-      placeholder: '--:-- --',
-      required: true,
-      validation: {
-        required: 'Stop time is required',
-        validate: (value, allValues) => {
-          if (!value || !allValues.start) return true; // skip if empty
-          const startTime = new Date(`1970-01-01T${allValues.start}:00`);
-          const stopTime = new Date(`1970-01-01T${value}:00`);
-          return stopTime >= startTime || 'Stop time cannot be before start time';
+  [FORM_TYPES.TIMESHEET]: {
+    title: 'NEW TIMESHEET',
+    fields: [
+      {
+        name: 'date',
+        label: 'DATE',
+        type: 'date',
+        defaultValue: new Date().toISOString().split('T')[0]
+      },
+      {
+        name: 'partyName',
+        label: 'PARTY NAME',
+        type: 'search',
+        placeholder: 'Search party...',
+        required: true,
+        validation: { required: 'Party name is required' }
+      },
+      {
+        name: 'start',
+        label: 'START',
+        type: 'time',
+        placeholder: '--:-- --',
+        required: true,
+        validation: { required: 'Start time is required' }
+      },
+      {
+        name: 'stop',
+        label: 'STOP',
+        type: 'time',
+        placeholder: '--:-- --',
+        required: true,
+        validation: {
+          required: 'Stop time is required',
+          validate: (value, allValues) => {
+            if (!value || !allValues.start) return true;
+            const startTime = new Date(`1970-01-01T${allValues.start}:00`);
+            const stopTime = new Date(`1970-01-01T${value}:00`);
+            return stopTime >= startTime || 'Stop time cannot be before start time';
+          }
         }
+      },    
+      {
+        name: 'duration',
+        label: 'DURATION',
+        type: 'display',
+        placeholder: 'Auto calculated',
+        readonly: true
+      },
+      {
+        name: 'projectName',
+        label: 'PROJECT NAME',
+        type: 'search',
+        placeholder: 'Search project...',
+        required: true,
+        validation: { required: 'Project name is required' }
+      },
+      {
+        name: 'taskName',
+        label: 'TASK NAME',
+        type: 'dropdown',
+        placeholder: 'Add Task',
+        required: true,
+        validation: { required: 'Task name is required' },
+        options: ['Development', 'Testing', 'Design', 'Meeting', 'Documentation']
+      },
+      {
+        name: 'remarks',
+        label: 'REMARKS',
+        type: 'textarea',
+        placeholder: 'Add remarks...',
+        rows: 4
       }
-    },
-    {
-      name: 'duration',
-      label: 'DURATION',
-      type: 'text',
-      placeholder: 'Auto calculated',
-      readonly: true
-    },
-    {
-      name: 'projectName',
-      label: 'PROJECT NAME',
-      type: 'search',
-      placeholder: 'Search project...',
-      required: true,
-      validation: { required: 'Project name is required' }
-    },
-    {
-      name: 'taskName',
-      label: 'TASK NAME',
-      type: 'dropdown',
-      placeholder: 'Add Task',
-      options: ['Development', 'Testing', 'Design', 'Meeting', 'Documentation']
-    },
-    {
-      name: 'remarks',
-      label: 'REMARKS',
-      type: 'textarea',
-      placeholder: 'Add remarks...',
-      rows: 4
+    ],
+    defaultValues: {
+      date: new Date().toISOString().split('T')[0],
+      partyName: '',
+      start: '',
+      stop: '',
+      duration: '',
+      projectName: '',
+      taskName: '',
+      remarks: ''
     }
-  ],
-  defaultValues: {
-    date: '2025-08-15',
-    partyName: '',
-    start: '',
-    stop: '',
-    duration: '',
-    projectName: '',
-    taskName: '',
-    remarks: ''
-  }
-},
+  },
 
-[FORM_TYPES.MOM]: {
-  title: 'NEW MOM',
-  fields: [
-    {
-      name: 'date',
-      label: 'DATE',
-      type: 'date',
-      defaultValue: '2025-08-16',
-      required: true,
-      validation: { required: 'Date is required' }
-    },
-    {
-      name: 'meetingName',
-      label: 'MEETING NAME',
-      type: 'text',
-      placeholder: 'Enter meeting name',
-      required: true,
-      validation: { required: 'Meeting name is required' }
-    },
-    {
-      name: 'selectProject',
-      label: 'SELECT PROJECT',
-      type: 'search',
-      placeholder: 'Search and select project...',
-      required: true,
-      hasSearchIcon: true,
-      validation: { required: 'Project selection is required' }
-    },
-    {
-      name: 'attendee',
-      label: 'ATTENDEE',
-      type: 'search',
-      placeholder: 'Search and add attendees...',
-      hasSearchIcon: true,
-      multiSelect: true
-    },
-    {
-      name: 'notes',
-      label: 'NOTES',
-      type: 'textarea',
-      placeholder: 'Add meeting notes...',
-      rows: 6
-    },
-    {
-      name: 'attachMedia',
-      label: 'ATTACH MEDIA',
-      type: 'file',
-      placeholder: 'Attach files...',
-      hasUploadIcon: true,
-      accept: '.pdf,.doc,.docx,.jpg,.jpeg,.png,.mp4,.avi'
+  [FORM_TYPES.MOM]: {
+    title: 'NEW MOM',
+    fields: [
+      {
+        name: 'date',
+        label: 'DATE',
+        type: 'date',
+        defaultValue: new Date().toISOString().split('T')[0],
+        required: true,
+        validation: { required: 'Date is required' }
+      },
+      {
+        name: 'meetingName',
+        label: 'MEETING NAME',
+        type: 'text',
+        placeholder: 'Enter meeting name',
+        required: true,
+        validation: { required: 'Meeting name is required' }
+      },
+      {
+        name: 'selectProject',
+        label: 'SELECT PROJECT',
+        type: 'search',
+        placeholder: 'Search and select project...',
+        required: true,
+        hasSearchIcon: true,
+        validation: { required: 'Project selection is required' }
+      },
+      {
+        name: 'attendee',
+        label: 'ATTENDEE',
+        type: 'search',
+        placeholder: 'Search and add attendees...',
+        hasSearchIcon: true,
+        multiSelect: true
+      },
+      {
+        name: 'notes',
+        label: 'NOTES',
+        type: 'textarea',
+        placeholder: 'Add meeting notes...',
+        rows: 6
+      },
+      {
+        name: 'attachMedia',
+        label: 'ATTACH MEDIA',
+        type: 'file',
+        placeholder: 'Attach files...',
+        hasUploadIcon: true,
+        accept: '.pdf,.doc,.docx,.jpg,.jpeg,.png,.mp4,.avi'
+      }
+    ],
+    defaultValues: {
+      date: new Date().toISOString().split('T')[0],
+      meetingName: '',
+      selectProject: '',
+      attendee: [],
+      notes: '',
+      attachMedia: null
     }
-  ],
-  defaultValues: {
-    date: '2025-08-16',
-    meetingName: '',
-    selectProject: '',
-    attendee: [],
-    notes: '',
-    attachMedia: null
-  }
-},
+  },
 
-[FORM_TYPES.LEAD]: {
+  [FORM_TYPES.LEAD]: {
     title: 'NEW LEAD',
     headerColor: 'purple',
     fields: [
       {
         name: 'leadAssignee',
         label: 'LEAD ASSIGNEE',
-        type: 'dropdown',
-        placeholder: 'Select assignee',
+        type: 'search',
+        placeholder: 'Search assignee...',
         required: true,
-        options: ['Sagar', 'Priya', 'Amit', 'Rahul', 'Anita'],
         validation: { required: 'Lead assignee is required' }
       },
       {
@@ -504,5 +494,4 @@ export const formConfigs = {
       description: ''
     }
   }
-
 };

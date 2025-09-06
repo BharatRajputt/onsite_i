@@ -7,13 +7,16 @@ import ReusableTable from '../component/table/Table.jsx';
 import { Factory, Handshake, Landmark, Users } from 'lucide-react';
 import DynamicModal from '../component/DynamicModal.jsx';
 import { FORM_TYPES } from '../config/formConfig.js';
-
+import {useGetMembersQuery } from '../store/api'
 const Members = () => {
   const dispatch = useDispatch();
-  const { parties, loading, error } = useSelector((state) => state.party);
-  
-  const members =[...parties]
-  console.log(parties)
+  const { parties, loading, erro } = useSelector((state) => state.party);
+  const { data: party, error, isLoading: isLoadingg } = useGetMembersQuery();
+  console.log(party);
+
+  const members = party?.data || [];
+
+
 
   // States
   const [visibleColumns, setVisibleColumns] = useState(['name', 'partyType', 'contact', 'balance']);
@@ -39,14 +42,18 @@ const Members = () => {
 
   // Filter members based on search term and type
   const filteredMembers = members.filter(member => {
-    const matchesSearch = member.partyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.phone?.includes(searchTerm);
-    
+    const search = searchTerm.toLowerCase();
+    return (
+      member.partyName?.toLowerCase().includes(search) ||
+      member.email?.toLowerCase().includes(search)
+      // Remove `member.phone` since you're not using it
+    );
     const matchesType = filterType === 'All Types' || member.partyType === filterType;
     
     return matchesSearch && matchesType;
   });
+
+  console.log(filteredMembers);
 
   // Define table columns for members
   const columns = [
@@ -108,12 +115,17 @@ const Members = () => {
     {
       key: 'bankAccount',
       label: 'Bank Account',
-      render: (value, item) => (
-        <span className="text-sm text-gray-600">
-          {item.bankAccount || '--NA--'}
-        </span>
-      )
-    }
+      render: (value) => {
+        if (!value || typeof value !== 'object') return '-';
+        return (
+          <div className="text-sm text-gray-700 leading-tight">
+            <div>Acc: {value.accountNumber || '--'}</div>
+            <div>Bank: {value.bankName || '--'}</div>
+            <div>IFSC: {value.ifscCode || '--'}</div>
+          </div>
+        );
+      }
+    },
   ];
 
   const handleColumnToggle = (columnKey) => {
@@ -296,7 +308,9 @@ const Members = () => {
             data={filteredMembers}
             columns={columns}
             visibleColumns={visibleColumns}
+            onEditProject={handleEditMember}
             onColumnToggle={handleColumnToggle}
+
             onDuplicateProject={handleDuplicateMember}
             emptyMessage="No members found. Try adjusting your search or filters, or click 'Add Party' to get started."
             customActions={memberActions}

@@ -7,9 +7,12 @@ import ClientDetails from '../component/tabs/ClientDetailsTab';
 import { addParty, deleteParty } from '../store/partySlice'
 import { useDispatch } from 'react-redux';
 import { addProject } from '../store/projectSlice';
+import { useAddProjectMutation, useGetMembersQuery } from '../store/api'
 
 const ProjectSetting = ({ onClose, initialData = {} }) => {
+  console.log(initialData);
   const [activeTab, setActiveTab] = useState('Project Details');
+  const { data: fetchedMembers, error: memberError, isLoading: membersLoading } = useGetMembersQuery();
   const [projectData, setProjectData] = useState({
     // Project details
     projectName: initialData.projectName || '',
@@ -17,6 +20,7 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
     startDate: '',
     endDate: '',
     projectAddress: initialData.address || '',
+    projectCity: initialData.city || '',
     attendanceRadius: '500',
     projectValue: '0',
     projectOrientation: '',
@@ -42,9 +46,11 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
   });
 
   const [members, setMembers] = useState([]);
+  const [selectedMembers, setSelectedMembers] = useState([]); // Add selected members state
   const [newMemberName, setNewMemberName] = useState('');
   const [clientImage, setClientImage] = useState(null);
   const [clientImagePreview, setClientImagePreview] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const dispatch = useDispatch();
 
   // Hide body scroll when modal opens
@@ -55,6 +61,31 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
       document.body.style.overflow = originalStyle;
     };
   }, []);
+
+  useEffect(() => {
+    if (fetchedMembers && Array.isArray(fetchedMembers.data)) {
+      setMembers(fetchedMembers.data.map(member => ({
+        ...member,
+        avatar: member.name?.charAt(0).toUpperCase() || 'U',
+      })));
+    }
+  }, [fetchedMembers]);
+  
+  const [addProjectQuery] = useAddProjectMutation();
+
+  // Token management functions
+  const getAuthToken = () => {
+    return localStorage.getItem('authToken');
+  };
+
+  const getAuthHeaders = () => {
+    const token = getAuthToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const isAuthenticated = () => {
+    return !!getAuthToken();
+  };
 
   const handleInputChange = (field, value) => {
     setProjectData(prev => ({
@@ -79,6 +110,19 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
 
   const handleRemoveMember = (memberId) => {
     setMembers(prev => prev.filter(member => member.id !== memberId));
+    // Also remove from selected members if it was selected
+    setSelectedMembers(prev => prev.filter(member => member.id !== memberId));
+  };
+
+  // New functions for member selection
+  const handleSelectMember = (member) => {
+    if (!selectedMembers.some(selected => selected.id === member.id)) {
+      setSelectedMembers(prev => [...prev, member]);
+    }
+  };
+
+  const handleUnselectMember = (memberId) => {
+    setSelectedMembers(prev => prev.filter(member => member.id !== memberId));
   };
 
   const handleImageUpload = (event) => {
@@ -98,39 +142,84 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
     setClientImagePreview(null);
   };
 
-  const handleSave = () => {
-    // Validation
-    const requiredFields = ['projectName'];
-    const missingFields = requiredFields.filter(field => !projectData[field].trim());
-    
-    if (missingFields.length > 0) {
-      alert('Please fill in all required fields: ' + missingFields.join(', '));
-      return;
+  const handleSave = async () => {
+    try {
+      // Check if user is authenticated
+      if (!isAuthenticated()) {
+        alert('Please login first to save the project.');
+        return;
+      }
+
+      setIsLoading(true);
+
+      // Validation
+      const requiredFields = ['projectName'];
+      const missingFields = requiredFields.filter(field => !projectData[field].trim());
+      
+      if (missingFields.length > 0) {
+        alert('Please fill in all required fields: ' + missingFields.join(', '));
+        setIsLoading(false);
+        return;
+      }
+
+      // Create the complete project object with all expected fields
+      const completeProjectData = {
+        ...projectData,
+        // Update timestamp when saving
+        createdAt: projectData.createdAt || new Date().toISOString(),
+        // Ensure all fields are present even if empty
+        clientCompanyName: projectData.clientCompanyName || "",
+        clientMobile: projectData.clientMobile || "",
+        clientName: projectData.clientName || "",
+        companyAddress: projectData.companyAddress || "",
+        companyGstNumber: projectData.companyGstNumber || "",
+        endDate: projectData.endDate || "",
+        projectCode: projectData.projectCode || "",
+        projectDimension: projectData.projectDimension || "",
+        projectOrientation: projectData.projectOrientation || "",
+        startDate: projectData.startDate || "",
+        // Add selected members to the project data
+        selectedMembers: selectedMembers, // This will be sent to backend
+        members: members // Keep all members for local state
+      };
+
+      console.log('Complete project data:', completeProjectData);
+      console.log('Selected members for project:', selectedMembers);
+      console.log('Auth headers:', getAuthHeaders());
+
+      // Add to Redux store first (local state)
+      dispatch(addProject(completeProjectData));
+
+      // Send to backend with authentication token
+      const response = await addProjectQuery(completeProjectData).unwrap();
+      
+      console.log('Project saved successfully:', response);
+      
+      // Show success message with member count
+      const memberMessage = selectedMembers.length > 0 
+        ? ` with ${selectedMembers.length} team member${selectedMembers.length > 1 ? 's' : ''}` 
+        : '';
+      alert(`Project saved successfully${memberMessage}!`);
+      
+      onClose?.();
+    } catch (error) {
+      console.error('Error saving project:', error.message);
+      
+      // Handle different types of errors
+      if (error?.status === 401) {
+        alert('Authentication failed. Please login again.');
+        // Optionally redirect to login page
+        // window.location.href = '/login';
+      } else if (error?.status === 403) {
+        alert('You do not have permission to create projects.');
+      } else if (error?.data?.message) {
+        alert('Error: ' + error.data.message);
+      } else {
+        alert('Failed to save project. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
-
-    // Create the complete project object with all expected fields
-    const completeProjectData = {
-      ...projectData,
-      // Update timestamp when saving
-      createdAt: projectData.createdAt || new Date().toISOString(),
-      // Ensure all fields are present even if empty
-      clientCompanyName: projectData.clientCompanyName || "",
-      clientMobile: projectData.clientMobile || "",
-      clientName: projectData.clientName || "",
-      companyAddress: projectData.companyAddress || "",
-      companyGstNumber: projectData.companyGstNumber || "",
-      endDate: projectData.endDate || "",
-      projectCode: projectData.projectCode || "",
-      projectDimension: projectData.projectDimension || "",
-      projectOrientation: projectData.projectOrientation || "",
-      startDate: projectData.startDate || "",
-      // Add members if needed
-      members: members
-    };
-
-    console.log('Complete project data:', completeProjectData);
-    dispatch(addProject(completeProjectData));
-    onClose?.();
   };
 
   const handleDeleteProject = () => {
@@ -141,7 +230,6 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
   };
 
   const tabs = ['Project Details', 'Members', 'Client Details'];
-
   const renderContent = () => {
     switch (activeTab) {
       case 'Project Details':
@@ -156,10 +244,13 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
           <Members
             projectData={projectData}
             members={members}
+            selectedMembers={selectedMembers} // Pass selected members
             newMemberName={newMemberName}
             setNewMemberName={setNewMemberName}
             handleAddMember={handleAddMember}
             handleRemoveMember={handleRemoveMember}
+            handleSelectMember={handleSelectMember} // Pass select function
+            handleUnselectMember={handleUnselectMember} // Pass unselect function
           />
         );
       case 'Client Details':
@@ -185,7 +276,14 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
         <div className="flex items-center justify-between p-8 border-b border-gray-100 bg-gradient-to-r from-white to-purple-50/30">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Project Settings</h2>
-            <p className="text-sm text-gray-500 mt-1">Configure your project details and team</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Configure your project details and team
+              {selectedMembers.length > 0 && (
+                <span className="ml-2 bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
+                  {selectedMembers.length} member{selectedMembers.length > 1 ? 's' : ''} selected
+                </span>
+              )}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -208,6 +306,12 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
               }`}
             >
               {tab}
+              {/* Show selected members count in Members tab */}
+              {tab === 'Members' && selectedMembers.length > 0 && (
+                <span className="ml-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
+                  {selectedMembers.length}
+                </span>
+              )}
               {activeTab === tab && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-violet-500 rounded-full"></div>
               )}
@@ -230,6 +334,7 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
           <button
             onClick={handleDeleteProject}
             className="group px-6 py-3 text-red-600 border-2 border-red-200 rounded-xl hover:bg-red-50 hover:border-red-300 transition-all duration-200 font-semibold flex items-center space-x-2"
+            disabled={isLoading}
           >
             <span>Delete Project</span>
           </button>
@@ -237,15 +342,35 @@ const ProjectSetting = ({ onClose, initialData = {} }) => {
             <button
               onClick={onClose}
               className="px-6 py-3 text-gray-600 border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 font-semibold"
+              disabled={isLoading}
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="group relative px-8 py-3 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl font-semibold overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/30 transform hover:scale-[1.02]"
+              disabled={isLoading}
+              className={`group relative px-8 py-3 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl font-semibold overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/30 transform hover:scale-[1.02] ${
+                isLoading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-purple-700 to-violet-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
-              <span className="relative z-10">Save Project</span>
+              <span className="relative z-10 flex items-center space-x-2">
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>
+                    Save Project
+                    {selectedMembers.length > 0 && (
+                      <span className="ml-2 bg-purple-800 px-2 py-1 rounded text-xs">
+                        +{selectedMembers.length} member{selectedMembers.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </span>
             </button>
           </div>
         </div>

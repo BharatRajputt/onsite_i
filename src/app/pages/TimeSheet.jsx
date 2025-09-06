@@ -6,6 +6,7 @@ import DynamicModal from '../component/DynamicModal.jsx';
 import Table from '../component/table/Table.jsx';
 import { FORM_TYPES } from '../config/formConfig.js';
 import { addTimesheet, updateTimesheet, deleteTimesheet } from '../store/timeSlice.js';
+import { useGetAllTimesheetsQuery } from '../store/api'
 
 const TimeSheet = () => {
   const dispatch = useDispatch();
@@ -17,6 +18,10 @@ const TimeSheet = () => {
   // Modal state
   const [isOpen, setIsOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
+  
+  // RTK Query for fetching timesheets
+  const { data: timeSheetData, isLoading: apiLoading, error: apiError } = useGetAllTimesheetsQuery();
+  console.log('Timesheet data from API:', timeSheetData);
   
   // Filter states
   const [partyFilter, setPartyFilter] = useState('Party');
@@ -54,20 +59,49 @@ const TimeSheet = () => {
   // Format time for display
   const formatTime = (timeString) => {
     if (!timeString) return '--:--';
-    const [hours, minutes] = timeString.split(':');
-    const hour12 = hours % 12 || 12;
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    return `${hour12}:${minutes} ${ampm}`;
+    
+    // Handle different time formats
+    if (timeString.includes('T')) {
+      // ISO format
+      const date = new Date(timeString);
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    } else {
+      // HH:MM format
+      const [hours, minutes] = timeString.split(':');
+      const hour12 = hours % 12 || 12;
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      return `${hour12}:${minutes} ${ampm}`;
+    }
   };
 
-  // Define table columns
+  // Format duration for display
+  const formatDuration = (duration) => {
+    if (!duration) return 'No duration';
+    
+    if (typeof duration === 'object') {
+      // Duration object format: { hours: 1, minutes: 30 }
+      const { hours = 0, minutes = 0 } = duration;
+      return `${hours}h ${minutes}m`;
+    } else if (typeof duration === 'string') {
+      // String format already formatted
+      return duration;
+    }
+    
+    return 'Invalid duration';
+  };
+
+  // Define table columns with better data mapping
   const columns = [
     {
       key: 'date',
       label: 'Date',
       render: (value, item) => (
         <div className="text-sm text-gray-900">
-          {formatDate(item.date)}
+          {formatDate(item.workDate || item.date)}
         </div>
       )
     },
@@ -76,7 +110,7 @@ const TimeSheet = () => {
       label: 'Party',
       render: (value, item) => (
         <div className="text-sm text-gray-900">
-          {item.partyName || 'Unknown Party'}
+          {item.partyId?.partyName || item.partyName || 'Unknown Party'}
         </div>
       )
     },
@@ -85,7 +119,7 @@ const TimeSheet = () => {
       label: 'Start & End Time',
       render: (value, item) => (
         <div className="text-sm text-gray-900">
-          {formatTime(item.start)} - {formatTime(item.stop)}
+          {formatTime(item.startTime || item.start)} - {formatTime(item.endTime || item.stop)}
         </div>
       )
     },
@@ -94,7 +128,7 @@ const TimeSheet = () => {
       label: 'Duration',
       render: (value, item) => (
         <div className="text-sm text-gray-900">
-          {item.duration || 'No duration'}
+          {formatDuration(item.duration)}
         </div>
       )
     },
@@ -105,14 +139,32 @@ const TimeSheet = () => {
         <div className="flex items-center">
           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
             <span className="text-blue-600 font-medium text-sm">
-              {item.projectName ? item.projectName.charAt(0).toUpperCase() : 'P'}
+              {(item.projectId?.projectName || item.projectName)?.charAt(0).toUpperCase() || 'P'}
             </span>
           </div>
-          {item.projectName && (
+          {(item.projectId?.projectName || item.projectName) && (
             <span className="ml-2 text-sm text-gray-600">
-              {item.projectName}
+              {item.projectId?.projectName || item.projectName}
             </span>
           )}
+        </div>
+      )
+    },
+    {
+      key: 'task',
+      label: 'Task',
+      render: (value, item) => (
+        <div className="text-sm text-gray-900">
+          {item.taskId?.taskName || item.taskName || 'No task'}
+        </div>
+      )
+    },
+    {
+      key: 'remarks',
+      label: 'Remarks',
+      render: (value, item) => (
+        <div className="text-sm text-gray-500 max-w-xs truncate">
+          {item.remarks || 'No remarks'}
         </div>
       )
     }
@@ -129,22 +181,37 @@ const TimeSheet = () => {
     });
   };
 
+  // Use API data if available, fallback to Redux data
+  const timesheetData = timeSheetData?.data || timesheets || [];
+  const isLoadingData = apiLoading || loading;
+  const dataError = apiError || error;
+
   // Filter timesheets based on search term and filters
-  const filteredTimesheets = timesheets.filter(timesheet => {
-    const matchesSearch = timesheet.partyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         timesheet.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         timesheet.remarks?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredTimesheets = timesheetData.filter(timesheet => {
+    const partyName = timesheet.partyId?.partyName || timesheet.partyName || '';
+    const projectName = timesheet.projectId?.projectName || timesheet.projectName || '';
+    const taskName = timesheet.taskId?.taskName || timesheet.taskName || '';
+    const remarks = timesheet.remarks || '';
     
-    const matchesParty = partyFilter === 'Party' || timesheet.partyName === partyFilter;
+    const matchesSearch = partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         taskName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         remarks.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Date filter logic can be added here
+    const matchesParty = partyFilter === 'Party' || partyName === partyFilter;
+    
+    // Date filter logic can be enhanced
     const matchesDate = dateFilter === 'Date Filter' || true; // Implement date filtering as needed
     
     return matchesSearch && matchesParty && matchesDate;
   });
 
   // Get unique parties for filter dropdown
-  const uniqueParties = ['Party', ...new Set(timesheets.map(ts => ts.partyName).filter(Boolean))];
+  const uniqueParties = ['Party', ...new Set(
+    timesheetData
+      .map(ts => ts.partyId?.partyName || ts.partyName)
+      .filter(Boolean)
+  )];
 
   // Action handlers
   const handleEditTimesheet = (timesheet) => {
@@ -156,7 +223,8 @@ const TimeSheet = () => {
   const handleDuplicateTimesheet = (timesheet) => {
     const duplicatedTimesheet = {
       ...timesheet,
-      id: undefined, // Remove ID so new one will be generated
+      _id: undefined, // Remove ID so new one will be generated
+      id: undefined,
       remarks: `${timesheet.remarks || 'Duplicated'} (Copy)`,
       createdAt: new Date().toISOString()
     };
@@ -164,16 +232,25 @@ const TimeSheet = () => {
   };
 
   const handleDeleteTimesheet = (timesheet) => {
-    if (window.confirm(`Are you sure you want to delete this timesheet entry for ${timesheet.partyName}?`)) {
-      dispatch(deleteTimesheet(timesheet.id));
+    const partyName = timesheet.partyId?.partyName || timesheet.partyName || 'this entry';
+    if (window.confirm(`Are you sure you want to delete this timesheet entry for ${partyName}?`)) {
+      dispatch(deleteTimesheet(timesheet._id || timesheet.id));
     }
   };
 
   // Calculate total hours
   const totalHours = filteredTimesheets.reduce((total, ts) => {
     if (ts.duration) {
-      const hours = parseInt(ts.duration.replace(/[^\d]/g, '')) || 0;
-      return total + hours;
+      if (typeof ts.duration === 'object') {
+        return total + (ts.duration.hours || 0) + (ts.duration.minutes || 0) / 60;
+      } else if (typeof ts.duration === 'string') {
+        const match = ts.duration.match(/(\d+)h\s*(\d+)m/);
+        if (match) {
+          const hours = parseInt(match[1]) || 0;
+          const minutes = parseInt(match[2]) || 0;
+          return total + hours + minutes / 60;
+        }
+      }
     }
     return total;
   }, 0);
@@ -183,71 +260,61 @@ const TimeSheet = () => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="bg-white border-b border-gray-200 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                {/* Party Filter */}
-                <div className="relative">
-                  <select
-                    value={partyFilter}
-                    onChange={(e) => setPartyFilter(e.target.value)}
-                    className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {uniqueParties.map(party => (
-                      <option key={party} value={party}>{party}</option>
-                    ))}
-                  </select>
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Date Filter */}
-                <div className="relative">
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="Date Filter">Date Filter</option>
-                    <option value="Today">Today</option>
-                    <option value="This Week">This Week</option>
-                    <option value="This Month">This Month</option>
-                    <option value="Custom Range">Custom Range</option>
-                  </select>
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
+          <div className="flex items-center space-x-4">
+            {/* Party Filter */}
+            <div className="relative">
+              <select
+                value={partyFilter}
+                onChange={(e) => setPartyFilter(e.target.value)}
+                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {uniqueParties.map(party => (
+                  <option key={party} value={party}>{party}</option>
+                ))}
+              </select>
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
+            </div>
 
-              {/* Search Box */}
-              <div className="relative max-w-md left-2">
-                <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                  <Search size={16} className="text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="search"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <Search size={16} className="text-gray-400" />
-                </div>
+            {/* Date Filter */}
+            <div className="relative">
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="Date Filter">Date Filter</option>
+                <option value="Today">Today</option>
+                <option value="This Week">This Week</option>
+                <option value="This Month">This Month</option>
+                <option value="Custom Range">Custom Range</option>
+              </select>
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
             </div>
           </div>
 
-          <div></div>
+          {/* Search Box */}
+          <div className="relative max-w-md">
+            <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+              <Search size={16} className="text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search timesheets..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
 
           <div className="flex items-center space-x-4">
-            {/* Premium Plan Badge */}
             {/* Action Buttons */}
             <button className="text-blue-600 hover:text-blue-700 font-medium">
               Get Loan
@@ -268,7 +335,7 @@ const TimeSheet = () => {
       </div>
 
       {/* Loading State */}
-      {loading && (
+      {isLoadingData && (
         <div className="p-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -278,16 +345,18 @@ const TimeSheet = () => {
       )}
 
       {/* Error State */}
-      {error && (
+      {dataError && (
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-700">Error: {error}</p>
+            <p className="text-red-700">
+              Error: {dataError?.data?.message || dataError?.message || 'Failed to load timesheets'}
+            </p>
           </div>
         </div>
       )}
 
       {/* Table Section */}
-      {!loading && !error && (
+      {!isLoadingData && !dataError && (
         <div className="p-6">
           {/* Table Component */}
           <Table
@@ -315,19 +384,27 @@ const TimeSheet = () => {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {totalHours}
+                    {Math.round(totalHours * 10) / 10}h
                   </div>
                   <div className="text-sm text-gray-500">Total Hours</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">
-                    {new Set(filteredTimesheets.map(ts => ts.partyName).filter(Boolean)).size}
+                    {new Set(
+                      filteredTimesheets
+                        .map(ts => ts.partyId?.partyName || ts.partyName)
+                        .filter(Boolean)
+                    ).size}
                   </div>
                   <div className="text-sm text-gray-500">Unique Parties</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-orange-600">
-                    {new Set(filteredTimesheets.map(ts => ts.projectName).filter(Boolean)).size}
+                    {new Set(
+                      filteredTimesheets
+                        .map(ts => ts.projectId?.projectName || ts.projectName)
+                        .filter(Boolean)
+                    ).size}
                   </div>
                   <div className="text-sm text-gray-500">Projects</div>
                 </div>
@@ -348,7 +425,7 @@ const TimeSheet = () => {
       {/* Dynamic Modal */}
       {activeModal && (
         <DynamicModal
-          formType={activeModal}
+          formType={FORM_TYPES.TIMESHEET}
           isOpen={isOpen}
           onClose={closeModal}
         />

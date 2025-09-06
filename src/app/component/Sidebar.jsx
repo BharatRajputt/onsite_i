@@ -31,7 +31,7 @@ const Sidebar = () => {
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-full w-64 bg-gradient-to-b from-purple-900 to-indigo-900 
+        fixed top-0 left-0 z-50 h-full w-64 bg-blue-900 from-purple-800 to-indigo-900 
         text-white transform transition-transform duration-300
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>

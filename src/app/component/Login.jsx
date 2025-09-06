@@ -1,10 +1,27 @@
 "use client"
 import React, { useState } from 'react';
-import { ChevronDown, ArrowRight, Smartphone } from 'lucide-react';
+import { ChevronDown, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { useAddUserMutation, useVerifyOtpMutation, useSigInUserMutation } from '../store/api'
+import { useRouter } from "next/navigation";
 
-const Login= () => {
-  const [phoneNumber, setPhoneNumber] = useState('');
+const Login = () => {
+  const [mode, setMode] = useState('signin'); // 'signin' or 'signup'
+  const [currentStep, setCurrentStep] = useState('form'); // 'form' or 'otp'
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    name: '',
+    phone: ''
+  });
+  const router = useRouter();
+
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+
+  const [signupUser] = useAddUserMutation()
+  const [verifyOtp] = useVerifyOtpMutation()
+  const [signinUser] = useSigInUserMutation()
 
   const testimonials = [
     {
@@ -27,12 +44,143 @@ const Login= () => {
     }
   ];
 
-  const handleNext = () => {
-    if (phoneNumber.length >= 10) {
-      // Handle login logic here
-      console.log('Login with phone:', phoneNumber);
+  // Token management functions
+  const storeToken = (token) => {
+    localStorage.setItem('authToken', token);
+    // You can also store in cookies for better security
+    // document.cookie = `authToken=${token}; path=/; secure; httpOnly`;
+  };
+
+  const getToken = () => {
+    return localStorage.getItem('authToken');
+  };
+
+  const removeToken = () => {
+    localStorage.removeItem('authToken');
+  };
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleOtpChange = (index, value) => {
+    if (value.length <= 1) {
+      const newOtp = [...otp];
+      newOtp[index] = value;
+      setOtp(newOtp);
+      
+      // Auto focus next input
+      if (value && index < 5) {
+        const nextInput = document.getElementById(`otp-${index + 1}`);
+        if (nextInput) nextInput.focus();
+      }
     }
   };
+
+  const handleFormSubmit = async () => {
+    try {
+      if (mode === 'signup') {
+        // Signup flow - requires OTP verification
+        if (formData.name && formData.email && formData.password && formData.phone) {
+          try {
+            const fd = new FormData();
+            for (let key in formData) {
+              fd.append(key, formData[key]);
+            }
+
+            const res = await signupUser(fd).unwrap();
+            console.log("Signup Success:", res);
+            setCurrentStep('otp'); // Move to OTP step for signup
+          } catch (err) {
+            console.error("Signup Error:", err);
+            // Handle signup error (show error message to user)
+          }
+        }
+      } else {
+        // Signin flow - direct login without OTP
+        if (formData.email && formData.password) {
+          try {
+            const signinData = {
+              email: formData.email,
+              password: formData.password
+            };
+
+            const res = await signinUser(signinData).unwrap();
+            console.log("Signin Success:", res);
+
+            // Check if login was successful and token is received
+            if (res.success && res.token) {
+              // Store the token
+              storeToken(res.token);
+              
+              // Optional: Store user data if needed
+              if (res.user) {
+                localStorage.setItem('userData', JSON.stringify(res.user));
+              }
+
+              // Redirect to dashboard
+              router.push("/dashboard");
+            } else {
+              // Handle case where success is false
+              console.error("Login failed:", res.message || "Unknown error");
+              // Show error message to user
+            }
+
+          } catch (err) {
+            console.error("Signin Error:", err);
+            // Handle signin error (show error message to user)
+            // You might want to show specific error messages based on error type
+          }
+        }
+      }
+    } catch (error) {
+      console.log(error.message);
+    }
+  };
+
+  const handleOtpSubmit = async () => {
+    const otpCode = otp.join('');
+    if (otpCode.length === 6) {
+      try {
+        // OTP verification only for signup
+        const res = await verifyOtp({
+          otp: otpCode,
+          phone: formData.phone // Only phone needed for signup OTP
+        }).unwrap();
+        
+        console.log("OTP Verified:", res);
+
+        // Store token after successful OTP verification
+        if (res.success && res.token) {
+          storeToken(res.token);
+          
+          // Optional: Store user data if needed
+          if (res.user) {
+            localStorage.setItem('userData', JSON.stringify(res.user));
+          }
+        }
+
+        router.push("/dashboard");
+
+      } catch (err) {
+        console.error("OTP Verify Error:", err);
+        // Handle OTP verification error
+      }
+    }
+  };
+
+  const isFormValid = () => {
+    if (mode === 'signup') {
+      return formData.name && formData.email && formData.password && formData.phone.length >= 10;
+    } else {
+      return formData.email && formData.password;
+    }
+  };
+
+  const isOtpComplete = otp.every(digit => digit !== '');
 
   const nextSlide = () => {
     setCurrentSlide((prev) => (prev + 1) % testimonials.length);
@@ -101,11 +249,11 @@ const Login= () => {
                   <span className="text-2xl">{testimonials[currentSlide].logo}</span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg">{testimonials[currentSlide].company}</h3>
-                  <p className="text-sm opacity-80">{testimonials[currentSlide].location}</p>
+                  <h3 className="font-semibold text-lg text-gray-600">{testimonials[currentSlide].company}</h3>
+                  <p className="text-sm text-gray-500 opacity-80">{testimonials[currentSlide].location}</p>
                 </div>
               </div>
-              <p className="text-sm leading-relaxed opacity-90 italic">
+              <p className="text-sm text-gray-600 leading-relaxed opacity-90 italic ">
                 "{testimonials[currentSlide].text}"
               </p>
             </div>
@@ -118,7 +266,7 @@ const Login= () => {
                     key={index}
                     onClick={() => setCurrentSlide(index)}
                     className={`w-3 h-3 rounded-full transition-all ${
-                      index === currentSlide ? 'bg-white' : 'bg-white bg-opacity-40'
+                      index === currentSlide ? 'bg-yellow-300' : 'bg-white bg-opacity-40'
                     }`}
                   />
                 ))}
@@ -126,15 +274,15 @@ const Login= () => {
               <div className="flex space-x-2">
                 <button
                   onClick={prevSlide}
-                  className="w-8 h-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all"
+                  className="w-8 h-8 bg-yellow-400 hover:bg-gray-400 bg-opacity-20 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all"
                 >
-                  <span className="text-sm">‹</span>
+                  <span className="text-sm text-white">‹</span>
                 </button>
                 <button
                   onClick={nextSlide}
-                  className="w-8 h-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all"
+                  className="w-8 h-8 bg-yellow-400 hover:bg-gray-400 bg-opacity-20 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all"
                 >
-                  <span className="text-sm">›</span>
+                  <span className="text-sm text-white">›</span>
                 </button>
               </div>
             </div>
@@ -142,7 +290,7 @@ const Login= () => {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right Side - Login/Signup Form */}
       <div className="flex-1 bg-gray-50 flex items-center justify-center relative">
         {/* Close Button */}
         <button className="absolute top-6 right-6 w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 transition-colors">
@@ -150,76 +298,205 @@ const Login= () => {
         </button>
 
         <div className="w-full max-w-md px-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Login & Sign Up</h2>
-            <p className="text-gray-600">Enter your country code and mobile number</p>
-          </div>
-
-          {/* Phone Illustration */}
-          <div className="flex justify-center mb-8">
-            <div className="relative">
-              <div className="w-32 h-48 bg-gradient-to-b from-blue-500 to-purple-600 rounded-2xl shadow-lg relative overflow-hidden">
-                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-16 h-6 bg-black bg-opacity-20 rounded-full"></div>
-                <div className="absolute top-12 left-4 right-4 h-20 bg-white bg-opacity-90 rounded-lg flex items-center justify-center">
-                  <span className="text-blue-600 font-bold text-lg">908.....</span>
+          {currentStep === 'form' ? (
+            <>
+              {/* Header with Toggle */}
+              <div className="text-center mb-8">
+                {/* Mode Toggle */}
+                <div className="inline-flex bg-gray-200 rounded-lg p-1 mb-6">
+                  <button
+                    onClick={() => setMode('signin')}
+                    className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                      mode === 'signin' 
+                        ? 'bg-white text-purple-600 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => setMode('signup')}
+                    className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                      mode === 'signup' 
+                        ? 'bg-white text-purple-600 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    Sign Up
+                  </button>
                 </div>
+                
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
+                </h2>
+                <p className="text-gray-600">
+                  {mode === 'signup' 
+                    ? 'Fill in your details to create an account' 
+                    : 'Enter your credentials to sign in'
+                  }
+                </p>
               </div>
-              <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-orange-400 rounded-full flex items-center justify-center shadow-lg">
-                <span className="text-white text-2xl">👋</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Form */}
-          <div className="space-y-4">
-            {/* Country Code and Phone Input */}
-            <div className="flex space-x-3">
-              <div className="relative">
-                <button className="flex items-center space-x-2 px-3 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors">
-                  <img src="https://flagcdn.com/16x12/in.png" alt="IN" className="w-4 h-3" />
-                  <span className="text-sm font-medium">+91</span>
-                  <ChevronDown size={16} className="text-gray-400" />
+              {/* Form Fields */}
+              <div className="space-y-4">
+                {/* Name Field (Signup only) */}
+                {mode === 'signup' && (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                    />
+                  </div>
+                )}
+
+                {/* Email Field */}
+                <div>
+                  <input
+                    type="email"
+                    placeholder="Email Address"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                  />
+                </div>
+
+                {/* Phone Field (Signup only) */}
+                {mode === 'signup' && (
+                  <div className="flex space-x-3">
+                    <div className="relative">
+                      <button className="flex items-center space-x-2 px-3 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors">
+                        <img src="https://flagcdn.com/16x12/in.png" alt="IN" className="w-4 h-3" />
+                        <span className="text-sm font-medium">+91</span>
+                        <ChevronDown size={16} className="text-gray-400" />
+                      </button>
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="tel"
+                        placeholder="Mobile Number"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Password Field */}
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Password"
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  onClick={handleFormSubmit}
+                  disabled={!isFormValid()}
+                  className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center space-x-2 ${
+                    isFormValid()
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <span>{mode === 'signup' ? 'Sign Up' : 'Sign In'}</span>
+                  <ArrowRight size={18} />
+                </button>
+
+                {/* Forgot Password (Sign In only) */}
+                {mode === 'signin' && (
+                  <div className="text-center">
+                    <a href="#" className="text-sm text-purple-600 hover:underline">
+                      Forgot Password?
+                    </a>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* OTP Verification Step (Only for Signup) */}
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify OTP</h2>
+                <p className="text-gray-600 mb-2">
+                  Enter the 6-digit code sent to
+                </p>
+                <p className="text-purple-600 font-medium">
+                  {formData.phone}
+                </p>
+              </div>
+
+              {/* OTP Input */}
+              <div className="space-y-6">
+                <div className="flex justify-center space-x-3">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      id={`otp-${index}`}
+                      type="text"
+                      maxLength="1"
+                      value={digit}
+                      onChange={(e) => handleOtpChange(index, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && !digit && index > 0) {
+                          const prevInput = document.getElementById(`otp-${index - 1}`);
+                          if (prevInput) prevInput.focus();
+                        }
+                      }}
+                      className="w-12 h-12 text-center text-xl font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                    />
+                  ))}
+                </div>
+
+                {/* Verify Button */}
+                <button
+                  onClick={handleOtpSubmit}
+                  disabled={!isOtpComplete}
+                  className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center space-x-2 ${
+                    isOtpComplete
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <span>Verify OTP</span>
+                  <ArrowRight size={18} />
+                </button>
+
+                {/* Resend OTP */}
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-gray-500">Didn't receive the code?</p>
+                  <button 
+                    onClick={() => console.log('Resend OTP')}
+                    className="text-sm text-purple-600 hover:underline font-medium"
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+
+                {/* Back Button */}
+                <button
+                  onClick={() => setCurrentStep('form')}
+                  className="w-full py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  ← Back to Sign Up
                 </button>
               </div>
-              <div className="flex-1">
-                <input
-                  type="tel"
-                  placeholder="Mobile"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Next Button */}
-            <button
-              onClick={handleNext}
-              disabled={phoneNumber.length < 10}
-              className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center space-x-2 ${
-                phoneNumber.length >= 10
-                  ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <span>Next</span>
-              <ArrowRight size={18} />
-            </button>
-
-            {/* Divider */}
-            <div className="flex items-center my-6">
-              <div className="flex-1 border-t border-gray-300"></div>
-              <span className="px-4 text-gray-500 text-sm">Or</span>
-              <div className="flex-1 border-t border-gray-300"></div>
-            </div>
-
-            {/* Login with App Button */}
-            <button className="w-full py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-gray-700">
-              <Smartphone size={18} className="text-purple-600" />
-              <span>Login with App</span>
-            </button>
-          </div>
+            </>
+          )}
 
           {/* Footer */}
           <div className="mt-8 text-center">

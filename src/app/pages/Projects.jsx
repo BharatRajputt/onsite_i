@@ -15,18 +15,33 @@ import {
 import Table from '../component/table/Table.jsx';
 import { BookCheck, List, Search, SquareCheckBig, Truck } from 'lucide-react';
 import { FORM_TYPES } from '../config/formConfig.js';
+import {useGetAllProjectsQuery}  from '../store/api'
 
 export default function Projects() {
   const dispatch = useDispatch();
   const router = useRouter();
   
   // Get projects from Redux store
+
+  const { dataaa, errorrr, isLoadingg } = useGetAllProjectsQuery();
+const allProjectssss = dataaa ; // 👈 Extract array safely
+
+console.log(allProjectssss);
+
+
+  const { data: allProjects, error, isLoading } = useGetAllProjectsQuery();
+  console.log("all projectsss ",allProjects?.data);
+
+
   const projects = useSelector(state=>state.projects);
   const data = {...projects}
-  console.log(data.projects)
   const pinnedProjectIds = useSelector(selectPinnedProjects);
 const goTodo=()=>{
   router.push('/todo')
+}
+
+const handleClickColumn = ()=>{
+  router.push('/transaction')
 }
 
 
@@ -36,10 +51,12 @@ const goTodo=()=>{
       key: 'name',
       label: 'Name',
       render: (value, item) => (
-        <div className="flex items-center">
-          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3">
+        <div onClick={handleClickColumn} className="flex items-center">
+          <div className="rounded-full flex items-center justify-center mr-3">
             <span className="text-purple-600 font-medium text-sm">
-              {value ? value.charAt(0).toUpperCase() : 'N'}
+              {
+                item.projectName
+              }
             </span>
           </div>
           <div>
@@ -208,7 +225,7 @@ const goTodo=()=>{
 
       {/* Projects Table */}
       <Table
-        data={data.projects}
+        data={allProjects?.data}
         columns={columns}
         visibleColumns={visibleColumns}
         onColumnToggle={handleColumnToggle}

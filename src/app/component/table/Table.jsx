@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { CirclePlus, Pin, MoreHorizontal } from 'lucide-react';
-import ViewModal from '@/app/modals/ViewEditModal';
+import ViewModal from '../../modals/ViewEditModal';
 
 const Table = ({ 
   data = [], 
@@ -18,7 +18,11 @@ const Table = ({
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [animatingColumns, setAnimatingColumns] = useState(new Set());
-  const [buttonRef, setButtonRef] = useState(null);
+  const [buttonRef, setButtonRef] = useState(null);  
+
+
+
+
   const handleColumnToggle = (columnKey) => {
     // Don't allow hiding the 'name' column
     if (columnKey === 'name') return;
@@ -94,6 +98,9 @@ const Table = ({
     }
     return item[column.key] || '-';
   };
+
+  
+  
 
   return (
     <>

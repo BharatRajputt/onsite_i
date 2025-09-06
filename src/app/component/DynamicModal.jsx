@@ -1,5 +1,7 @@
+// Enhanced DynamicModal Component with Dynamic Form Config
+
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { X, ChevronDown, Upload, Calendar, Clock, Search, ArrowLeft } from 'lucide-react';
 import { addParty } from '../store/partySlice';
@@ -8,17 +10,33 @@ import { addTimesheet } from '../store/timeSlice';
 import { addLead, updateLead } from '../store/leadSlice';
 import { addMom } from '../store/momSlice';
 import { formConfigs, FORM_TYPES } from '../config/formConfig';
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+
 import { 
   initializeForm, 
   updateFormField, 
   saveTransaction, 
   clearCurrentForm 
 } from '../store/transactionField';
+import {useAddMemberMutation,useGetMembersQuery,useUpdateMemberMutation} from '../store/api.js'
+import {useAddProjectMutation,useGetAllProjectsQuery,useAddTimeSheetMutation}  from '../store/api'
 import { goBackToOptions } from '../store/transactionOptionSlice';
 
 const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialData }) => {
   const dispatch = useDispatch();
   
+  // RTK Query hooks
+  const [addMember, { isLoading: isAddingMember, error: addMemberError }] = useAddMemberMutation();
+  const [updateMember, { isLoading: isUpdatingMember, error: updateMemberError }] = useUpdateMemberMutation();
+  const [addProject, { isLoading: isAddingProject, error: addProjectError }] = useAddProjectMutation();
+  const [addTimesheets,{isLoading:isAddingTimeSheet,error:addTimesheet}] = useAddTimeSheetMutation()
+  
+  // Fetch API data for dynamic options
+  const { data: userProjects = [], isLoading: projectsLoading } = useGetAllProjectsQuery();
+  const { data: userMembers = [], isLoading: membersLoading } = useGetMembersQuery();
+  const { data: projects } = useGetAllProjectsQuery();
+console.log(userProjects.data)
   // Get transaction-specific state
   const { 
     fieldConfigs, 
@@ -27,36 +45,111 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
   } = useSelector(state => state.transactionFields);
   
   const { selectedOption } = useSelector(state => state.transactionOptions);
-  
+
+  // Dynamic form config enhancement
+ // Dynamic form config enhancement
+const enhanceFormConfig = useMemo(() => {
+  if (!formConfigs[formType]) return null;
+
+  // Helper functions for dynamic options with null safety
+  const getProjectSearchOptions = () => {
+    const projectsData = userProjects?.data || userProjects || [];
+    return projectsData.map(p => ({
+      value: p._id,
+      label: p.projectName || p.name
+    }));
+  };
+
+  const getMemberSearchOptions = () => {
+    const membersData = userMembers?.data || userMembers || [];
+    return membersData.map(m => ({
+      value: m._id,
+      label: m.name || m.partyName
+    }));
+  };
+
+  const getPartySearchOptions = () => {
+    const membersData = userMembers?.data || userMembers || [];
+    const projectsData = userProjects?.data || userProjects || [];
+    const memberOptions = membersData.map(m => ({
+      value: m._id,
+      label: m.partyName || m.name,
+      type: 'member'
+    }));
+    
+    const projectOptions = projectsData.map(p => ({
+      value: p._id,
+      label: p.projectName || p.name,
+      type: 'project'
+    }));  
+    
+    return [...memberOptions, ...projectOptions];
+  };
+
+  // Enhanced config with dynamic data
+  return {
+    ...formConfigs[formType],
+    fields: formConfigs[formType].fields.map(field => {
+      const enhancedField = { ...field };
+
+      // Add searchOptions for search type fields
+      if (field.type === 'search') {
+        switch (field.name) {
+          case 'partyName':
+            enhancedField.searchOptions = getPartySearchOptions();
+            break;
+          case 'projectName':
+          case 'selectProject':
+            enhancedField.searchOptions = getProjectSearchOptions();
+            break;
+          case 'assigneeName':
+          case 'leadAssignee':
+          case 'attendee':
+            enhancedField.searchOptions = getMemberSearchOptions();
+            break;
+        }
+      }
+
+      return enhancedField;
+    })
+  };
+}, [formType, userProjects?.data, userMembers?.data]);
+
+
+console.log(enhanceFormConfig)
+
   // Determine if this is a transaction form
-  const isTransactionForm = selectedOption && Object.keys(fieldConfigs).includes(selectedOption.id);
-  
-  // Get the appropriate config
-  const config = isTransactionForm 
-    ? fieldConfigs[selectedOption.id] 
-    : formConfigs[formType];
-  
+  // Determine if this is a transaction form
+const isTransactionForm = selectedOption && Object.keys(fieldConfigs || {}).includes(selectedOption.id);
+
+// Get the config
+const config = isTransactionForm 
+  ? fieldConfigs[selectedOption?.id] 
+  : enhanceFormConfig;
+
   // Local state for non-transaction forms
   const [localFormData, setLocalFormData] = useState(config?.defaultValues || {});
+  console.log(localFormData)
   const [localErrors, setLocalErrors] = useState({});
   const [dropdownStates, setDropdownStates] = useState({});
 
   // Use appropriate form data and errors
   const formData = isTransactionForm ? currentFormData : localFormData;
+  console.log(formData)
   const errors = isTransactionForm ? formErrors : localErrors;
-
   useEffect(() => {
     if (isTransactionForm && selectedOption) {
-      // Initialize transaction form
       dispatch(initializeForm(selectedOption.id));
     } else if (config) {
-      // Initialize regular form
-      setLocalFormData(config.defaultValues || {});
+      const defaultVals = config.defaultValues || {};
+      setLocalFormData(prev => (
+        JSON.stringify(prev) === JSON.stringify(defaultVals) ? prev : defaultVals
+      ));
       setLocalErrors({});
     }
     setDropdownStates({});
-  }, [formType, selectedOption, config, dispatch, isTransactionForm]);
-
+  }, [formType, selectedOption?.id, config?.title]);
+  
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
@@ -79,8 +172,12 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
     // Auto-calculate duration for timesheet
     if (formType === FORM_TYPES.TIMESHEET && (name === 'start' || name === 'stop')) {
       const updatedData = { ...formData, [name]: value };
+      console.log('Updated timesheet data:', updatedData);
+      
       if (updatedData.start && updatedData.stop) {
         const duration = calculateDuration(updatedData.start, updatedData.stop);
+        console.log('Calculated duration:', duration);
+        
         if (isTransactionForm) {
           dispatch(updateFormField({ field: 'duration', value: duration }));
         } else {
@@ -92,28 +189,39 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
 
   const calculateDuration = (start, stop) => {
     if (!start || !stop) return '';
-    
-    const startTime = new Date(`2000-01-01 ${start}`);
-    const stopTime = new Date(`2000-01-01 ${stop}`);
-    
-    if (stopTime <= startTime) return '';
-    
+    const startTime = parseTime(start);
+    const stopTime = parseTime(stop);
+    if (stopTime <= startTime) return 'Invalid: Stop before Start';
     const diffMs = stopTime - startTime;
     const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
     return `${diffHrs}h ${diffMins}m`;
   };
 
-  const handleDropdownSelect = (fieldName, value) => {
+  const handleDropdownSelect = (fieldName, value, selectedOption = null) => {
     if (isTransactionForm) {
       dispatch(updateFormField({ field: fieldName, value }));
+
     } else {
       setLocalFormData(prev => ({
         ...prev,
         [fieldName]: value
       }));
     }
+
+    // Store ID separately for backend if selectedOption provided
+    if (selectedOption) {
+      const idFieldName = `${fieldName}_id`;
+      if (isTransactionForm) {
+        dispatch(updateFormField({ field: idFieldName, value: selectedOption.value }));
+      } else {
+        setLocalFormData(prev => ({
+          ...prev,
+          [idFieldName]: selectedOption.value
+        }));
+      }
+    }
+
     setDropdownStates(prev => ({
       ...prev,
       [fieldName]: false
@@ -127,74 +235,182 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
     }));
   };
 
+  // Time parsing functions
+  const parseTime = (timeStr) => {
+    if (!timeStr || timeStr.trim() === '') return null;
+    
+    try {
+      const [hours, minutes] = timeStr.split(':');
+      if (!hours || !minutes) return null;
+      
+      const date = new Date();
+      date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+      return date;
+    } catch (error) {
+      console.error('Error parsing time:', error);
+      return null;
+    }
+  };
+
+  const formatTime = (date) => {
+    if (!date) return '';
+    
+    try {
+      return date.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '';
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
-    
     if (!config?.fields) return false;
-    
+  
     config.fields.forEach(field => {
       const fieldValue = formData[field.name];
+  
+      console.log(`${field.name}:`, fieldValue);
       
       if (field.required && !fieldValue?.toString().trim()) {
         newErrors[field.name] = field.validation?.required || `${field.label} is required`;
       }
-      
+  
       if (field.validation?.pattern && fieldValue) {
         if (!field.validation.pattern.value.test(fieldValue)) {
           newErrors[field.name] = field.validation.pattern.message;
         }
       }
-      
+  
       if (field.validation?.minLength && fieldValue) {
         if (fieldValue.length < field.validation.minLength.value) {
           newErrors[field.name] = field.validation.minLength.message;
         }
       }
+  
+      if (typeof field.validation?.validate === 'function') {
+        const validationResult = field.validation.validate(fieldValue, formData);
+        if (validationResult !== true) {
+          newErrors[field.name] = validationResult || `${field.label} is invalid`;
+        }
+      }
     });
-    
+  
     if (isTransactionForm) {
-      // For transaction forms, you might want to dispatch setFormErrors
       // dispatch(setFormErrors(newErrors));
     } else {
       setLocalErrors(newErrors);
     }
-    
+  
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    console.log('Save button clicked');
+    console.log('Form data:', formData);
+    console.log('Form type:', formType);
+    
     if (validateForm()) {
-      if (isTransactionForm) {
-        // Save transaction
-        dispatch(saveTransaction());
-      } else {
-        // Handle other form types
-        switch (formType) {
-          case FORM_TYPES.PARTY:
-            dispatch(addParty(formData));
-            break;
-          case FORM_TYPES.TODO:
-            dispatch(addTodo(formData));
-            break;
-          case FORM_TYPES.TIMESHEET:
-            dispatch(addTimesheet(formData));
-            break;
-          case FORM_TYPES.MOM:
-            dispatch(addMom(formData));
-            break;
-          case FORM_TYPES.LEAD:
-            if (initialData) {
-              dispatch(updateLead({ id: initialData.id, ...formData }));
-            } else {
-              dispatch(addLead(formData));
-            }
-            break;
-          default:
-            break;
-        }
-      }
+      console.log('Form validation passed');
       
-      handleCancel();
+      try {
+        if (isTransactionForm) {
+          dispatch(saveTransaction());
+          console.log("Transaction saved");
+        } else {
+          console.log('Processing non-transaction form');
+          
+          switch (formType) {
+            case FORM_TYPES.PARTY:
+              console.log('Adding party member with data:', formData);
+              
+              if (initialData) {
+                const result = await updateMember({ 
+                  id: initialData.id, 
+                  ...formData 
+                }).unwrap();
+                console.log('Member updated successfully:', result);
+                alert('Member updated successfully!');
+              } else {
+                const result = await addMember(formData).unwrap();
+                console.log('Member added successfully:', result);
+                alert('Member added successfully!');
+              }
+              break;
+              
+            case FORM_TYPES.TODO:
+              console.log('Adding todo');
+              dispatch(addTodo(formData));
+              break;
+              
+            case FORM_TYPES.TIMESHEET:
+              console.log('Adding timesheet',formData);
+              
+              // Prepare timesheet data with proper field mapping
+              const timesheetData = {
+                workDate: formData.date,
+                duration: formData.duration,  
+                projectId: formData.projectName_id || formData.project_id, // Use stored ID
+                partyId:formData.partyName_id || formData.party_id,
+                startTime: formData.start,
+                endTime: formData.stop,
+                remarks: formData.remarks,
+                taskName: formData.taskName,
+
+              };
+              
+              console.log('Timesheet data being sent:', timesheetData);
+              const timesheetResult = await addTimesheets(timesheetData);
+              console.log('TimeSheet added successfully:', timesheetResult);
+              break;
+              
+            case FORM_TYPES.MOM:
+              console.log('Adding MOM');
+              dispatch(addMom(formData));
+              break;
+              
+            case FORM_TYPES.LEAD:
+              console.log('Adding/Updating lead');
+              if (initialData) {
+                dispatch(updateLead({ id: initialData.id, ...formData }));
+              } else {
+                dispatch(addLead(formData));
+              }
+              break;
+              
+            case FORM_TYPES.PROJECT:
+              console.log('Adding project');
+              const projectResult = await addProject(formData).unwrap();
+              console.log('Project added successfully:', projectResult);
+              alert('Project added successfully!');
+              break;
+              
+            default:
+              console.log('Unknown form type:', formType);
+              alert('Unknown form type: ' + formType);
+              break;
+          }
+        }
+        
+        handleCancel();
+        
+      } catch (error) {
+        console.error('Error saving data:', error);
+        
+        const errorMessage = error?.data?.message || 
+                           error?.message || 
+                           'Failed to save data. Please try again.';
+        alert('Error: ' + errorMessage);
+      }
+    } else {
+      console.log('Form validation failed');
+      console.log('Errors:', errors);
+      alert('Please fill in all required fields correctly.');
     }
   };
 
@@ -215,7 +431,69 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
     }
   };
 
+  // Enhanced search field renderer
+  const renderSearchField = (field) => {
+    const value = formData[field.name] || '';
+    const error = errors[field.name];
+    const isDropdownOpen = dropdownStates[field.name];
+    const searchOptions = field.searchOptions || [];
+
+    return (
+      <div key={field.name}>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+        <div className="relative">
+          <input
+            type="text"
+            name={field.name}
+            value={value}
+            onChange={handleInputChange}
+            placeholder={field.placeholder}
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              error ? 'border-red-300' : 'border-gray-300'
+            }`}
+            onFocus={() => setDropdownStates(prev => ({ ...prev, [field.name]: true }))}
+          />
+          <Search size={16} className="absolute right-3 top-3 text-gray-400" />
+          
+          {/* Dynamic dropdown with API data */}
+          {isDropdownOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+              {(projectsLoading || membersLoading) ? (
+                <div className="p-3 text-center text-gray-500">Loading...</div>
+              ) : (
+                <div className="p-2">
+                  {searchOptions.length > 0 ? (
+                    searchOptions
+                      .filter(option => 
+                        option?.label?.toLowerCase().includes(value.toLowerCase())
+                      )
+                      .map((option, index) => (
+      <div
+key={`${option.value}-${option.label}`}
+         className="cursor-pointer hover:bg-gray-50 p-2 rounded text-sm"
+                          onClick={() => handleDropdownSelect(field.name, option.label, option)}
+                        >
+                          {option.label}
+                        </div>
+                      ))
+                  ) : (
+                    <div className="p-3 text-center text-gray-500">
+                      No {field.name.includes('project') ? 'projects' : 'options'} available
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      </div>
+    );
+  };
+
   const renderField = (field) => {
+    console.log('Rendering field:', field.name, 'type:', field.type, 'value:', formData[field.name]);
+
     const value = formData[field.name] || '';
     const error = errors[field.name];
     const isDropdownOpen = dropdownStates[field?.name];
@@ -225,6 +503,9 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
     }`;
 
     switch (field.type) {
+      case 'search':
+        return renderSearchField(field);
+
       case 'text':
       case 'email':
       case 'password':
@@ -260,25 +541,6 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
           </div>
         );
 
-      case 'search':
-        return (
-          <div key={field.name}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-            <div className="relative">
-              <input
-                type="text"
-                name={field.name}
-                value={value}
-                onChange={handleInputChange}
-                placeholder={field.placeholder}
-                className={baseInputClass}
-              />
-              <Search size={16} className="absolute right-3 top-3 text-gray-400" />
-            </div>
-            {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-          </div>
-        );
-
       case 'textarea':
         return (
           <div key={field.name}>
@@ -294,7 +556,47 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
             {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
           </div>
         );
+       
+      case 'time':
+        return (
+          <div key={field.name}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+            <DatePicker
+              selected={value && value.trim() ? parseTime(value) : null}
+              onChange={(date) => {
+                console.log(`Time selected for ${field.name}:`, date);
+                const formatted = formatTime(date);
+                console.log(`Formatted time for ${field.name}:`, formatted);
+                handleInputChange({ target: { name: field.name, value: formatted } });
+              }}
+              showTimeSelect
+              showTimeSelectOnly
+              timeIntervals={15}
+              timeCaption="Time"
+              dateFormat="HH:mm"
+              placeholderText={field.placeholder || 'Select time'}
+              className={baseInputClass}
+              timeFormat="HH:mm"
+            />
+            {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+          </div>
+        );
 
+      case 'date':
+        return (
+          <div key={field.name}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+            <input
+              type="date"
+              name={field.name}
+              value={value}
+              onChange={handleInputChange}
+              className={baseInputClass}
+            />
+            {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+          </div>
+        );
+    
       case 'radio':
         return (
           <div key={field.name}>
@@ -345,6 +647,11 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
                       {option}
                     </div>
                   ))}
+                  {field.options.length === 0 && (
+                    <div className="p-3 text-center text-gray-500">
+                      No options available
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -428,6 +735,8 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
 
   if (!isOpen || !config) return null;
 
+  const isLoading = isAddingMember || isUpdatingMember || isAddingProject || isAddingTimeSheet;
+
   return (
     <>
       <style jsx>{`
@@ -454,6 +763,7 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
                 <button
                   onClick={handleGoBack}
                   className="text-gray-500 hover:text-gray-700 p-1"
+                  disabled={isLoading}
                 >
                   <ArrowLeft size={20} />
                 </button>
@@ -464,18 +774,21 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
               <button
                 onClick={handleCancel}
                 className="text-gray-500 hover:text-gray-700 px-3 py-1"
+                disabled={isLoading}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoading}
               >
-                Save
+                {isLoading ? 'Saving...' : 'Save'}
               </button>
               <button
                 onClick={handleCancel}
                 className="text-gray-500 hover:text-gray-700 p-1"
+                disabled={isLoading}
               >
                 <X size={20} />
               </button>
@@ -485,6 +798,19 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
           {/* Form Fields */}
           <div className="p-4 space-y-4">
             {config.fields?.map(renderField)}
+            
+            {/* Show any API errors */}
+            {(addMemberError || updateMemberError || addProjectError || addTimesheet) && (
+              <div className="p-3 bg-red-100 border border-red-300 rounded-md">
+                <p className="text-sm text-red-600">
+                  Error: {addMemberError?.data?.message || 
+                          updateMemberError?.data?.message || 
+                          addProjectError?.data?.message ||
+                          addTimesheet?.data?.message ||
+                          'Something went wrong'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
