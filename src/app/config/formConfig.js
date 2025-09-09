@@ -284,7 +284,7 @@ export const formConfigs = {
         validation: { required: 'Project selection is required' }
       },
       {
-        name: 'attendee',
+        name: 'attendees',
         label: 'ATTENDEE',
         type: 'search',
         placeholder: 'Search and add attendees...',
@@ -311,7 +311,7 @@ export const formConfigs = {
       date: new Date().toISOString().split('T')[0],
       meetingName: '',
       selectProject: '',
-      attendee: [],
+      attendees: [],
       notes: '',
       attachMedia: null
     }

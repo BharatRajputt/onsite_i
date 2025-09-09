@@ -8,7 +8,6 @@ import { addParty } from '../store/partySlice';
 import { addTodo } from '../store/todoSlice';
 import { addTimesheet } from '../store/timeSlice';
 import { addLead, updateLead } from '../store/leadSlice';
-import { addMom } from '../store/momSlice';
 import { formConfigs, FORM_TYPES } from '../config/formConfig';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -19,7 +18,7 @@ import {
   saveTransaction, 
   clearCurrentForm 
 } from '../store/transactionField';
-import {useAddMemberMutation,useGetMembersQuery,useUpdateMemberMutation} from '../store/api.js'
+import {useAddMemberMutation,useGetMembersQuery,useUpdateMemberMutation,useAddMomMutation} from '../store/api.js'
 import {useAddProjectMutation,useGetAllProjectsQuery,useAddTimeSheetMutation}  from '../store/api'
 import { goBackToOptions } from '../store/transactionOptionSlice';
 
@@ -31,7 +30,7 @@ const DynamicModal = ({ isOpen, onClose, formType = FORM_TYPES.PARTY, initialDat
   const [updateMember, { isLoading: isUpdatingMember, error: updateMemberError }] = useUpdateMemberMutation();
   const [addProject, { isLoading: isAddingProject, error: addProjectError }] = useAddProjectMutation();
   const [addTimesheets,{isLoading:isAddingTimeSheet,error:addTimesheet}] = useAddTimeSheetMutation()
-  
+  const [addMom,{isLoading:isAddingMom,error:addMo}] = useAddMomMutation()
   // Fetch API data for dynamic options
   const { data: userProjects = [], isLoading: projectsLoading } = useGetAllProjectsQuery();
   const { data: userMembers = [], isLoading: membersLoading } = useGetMembersQuery();
@@ -104,7 +103,7 @@ const enhanceFormConfig = useMemo(() => {
             break;
           case 'assigneeName':
           case 'leadAssignee':
-          case 'attendee':
+          case 'attendees':
             enhancedField.searchOptions = getMemberSearchOptions();
             break;
         }
@@ -371,7 +370,8 @@ const config = isTransactionForm
               
             case FORM_TYPES.MOM:
               console.log('Adding MOM');
-              dispatch(addMom(formData));
+              const addMome = await addMom(formData)
+              console.log(addMome)
               break;
               
             case FORM_TYPES.LEAD:
@@ -438,6 +438,7 @@ const config = isTransactionForm
     const isDropdownOpen = dropdownStates[field.name];
     const searchOptions = field.searchOptions || [];
 
+    console.log(searchOptions)
     return (
       <div key={field.name}>
         <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
@@ -463,11 +464,16 @@ const config = isTransactionForm
               ) : (
                 <div className="p-2">
                   {searchOptions.length > 0 ? (
-                    searchOptions
-                      .filter(option => 
-                        option?.label?.toLowerCase().includes(value.toLowerCase())
-                      )
-                      .map((option, index) => (
+                   searchOptions
+                   .filter(option => 
+                    option?.label?.toLowerCase().includes(
+                      typeof value === 'string' ? value.toLowerCase() : ''
+                    )
+                                       )
+                 
+
+                    
+                      ?.map((option, index) => (
       <div
 key={`${option.value}-${option.label}`}
          className="cursor-pointer hover:bg-gray-50 p-2 rounded text-sm"

@@ -361,6 +361,104 @@ updateUserProfile: builder.mutation({
 
 
 
+/////////////////////MOM APIS
+
+  // Create new MOM with file upload
+  addMom: builder.mutation({
+    query: (formData) => ({
+      url: '/mom/add-mom',
+      method: 'POST',
+      body: formData, // FormData object with files and other data
+    }),
+    invalidatesTags: ['MOM'],
+  }),
+
+  // Get all MOMs with filtering and pagination
+getAllMoms: builder.query({
+  query: ({ page = 1, limit = 10, projectId, attendeeId, startDate, endDate } = {}) => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+
+    if (projectId) params.append('selectProject_id', projectId);
+    if (attendeeId) params.append('attendeeId', attendeeId); // assuming backend supports it
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+
+    return {
+      url: `/mom/getAllMom?${params.toString()}`,
+      method: 'GET',
+    };
+  },
+  providesTags: (result) =>
+    result?.data
+      ? [
+          ...result.data.map(({ _id }) => ({ type: 'MOM', id: _id })),
+          { type: 'MOM', id: 'LIST' },
+        ]
+      : [{ type: 'MOM', id: 'LIST' }],
+}),
+
+
+  
+  
+
+
+
+
+
+
+
+
+
+  
+  // Get MOM by ID
+  getMomById: builder.query({
+    query: (id) => `/mom/${id}`,
+    providesTags: (result, error, id) => [{ type: 'MOM', id }],
+  }),
+
+  updateMom: builder.mutation({
+    query: ({ id, ...data }) => ({
+      url: `/mom/${id}`,
+      method: 'PUT',
+      body: data,
+    }),
+    invalidatesTags: (result, error, { id }) => [
+      { type: 'MOM', id },
+      { type: 'MOM', id: 'LIST' },
+    ],
+  }),
+
+  deleteMom: builder.mutation({
+    query: (id) => ({
+      url: `/mom/${id}`,
+      method: 'DELETE',
+    }),
+    invalidatesTags: ['MOM'],
+  }),
+
+  downloadAttachment: builder.mutation({
+    query: ({ momId, fileName }) => ({
+      url: `/mom/${momId}/attachment/${fileName}`,
+      method: 'GET',
+      responseHandler: (response) => response.blob(),
+    }),
+  }),
+
+  getMomStats: builder.query({
+    query: ({ startDate, endDate, projectId } = {}) => {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (projectId) params.append('projectId', projectId);
+      
+      return `/mom/stats/overview?${params.toString()}`;
+    },
+    providesTags: ['MOM'],
+  }),
+
 
 
 
@@ -399,6 +497,14 @@ export const {
   useGetTimesheetDetailsQuery,
   useUpdateTimesheetMutation,
   useDeleteTimesheetMutation,
+  
+///MOM API
+useAddMomMutation,
+  useGetAllMomsQuery,
+  useGetMomByIdQuery,
+  useUpdateMomMutation,
+  useDeleteMomMutation,
+  useDownloadAttachmentMutation,
 
 
 

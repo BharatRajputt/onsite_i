@@ -5,6 +5,7 @@ import { Search, Plus } from 'lucide-react';
 import Table from '../component/table/Table.jsx';
 import DynamicModal from '../component/DynamicModal.jsx';
 import { FORM_TYPES } from '../config/formConfig.js';
+import {useGetAllMomsQuery,useDeleteMomMutation} from '../store/api.js'
 // import { addMom, updateMom, deleteMom } from '../store/momSlice.js';
 
 const Mom = () => {
@@ -14,28 +15,26 @@ const Mom = () => {
   // const { moms, loading, error } = useSelector(state => state.moms);
   
   // Mock data for now
-  const moms = [
-    {
-      id: 1,
-      name: 'category',
-      date: '15 Aug 2025',
-      attendee: 1,
-      project: 'sagarguptagupta',
-      notes: '--'
-    }
-  ];
 
   // Modal state
   const [isOpen, setIsOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
-  
+  const { data: momData, isLoading: apiLoading, error: apiError } = useGetAllMomsQuery();
+   console.log(momData)
+const moms = momData?.data?.map(mom => ({
+  ...mom,
+  name: mom.meetingName,
+  attendees : mom.attendees?.map(a => a.partyName).join(', ') || '--',
+  project: mom.selectProject_id?.name || '--',
+}));
+
   // Filter states
   const [attendeeFilter, setAttendeeFilter] = useState('Attendee');
   const [projectFilter, setProjectFilter] = useState('Project');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Visible columns state for Table component
-  const [visibleColumns, setVisibleColumns] = useState(['name', 'attendee', 'project', 'notes']);
+  const [visibleColumns, setVisibleColumns] = useState(['name', 'attendees', 'project', 'notes']);
 
   // Modal handlers
   const openModal = (formType) => {
@@ -72,7 +71,7 @@ const Mom = () => {
       )
     },
     {
-      key: 'attendee',
+      key: 'attendees',
       label: 'Attendee',
       render: (value) => (
         <div className="text-sm text-gray-900">
@@ -112,11 +111,11 @@ const Mom = () => {
   };
 
   // Get unique attendees and projects for filter dropdowns
-  const uniqueAttendees = ['Attendee', ...new Set(moms.map(mom => mom.attendee).filter(Boolean))];
-  const uniqueProjects = ['Project', ...new Set(moms.map(mom => mom.project).filter(Boolean))];
+  const uniqueAttendees = ['Attendee', ...new Set(moms?.map(mom => mom.attendee).filter(Boolean))];
+  const uniqueProjects = ['Project', ...new Set(moms?.map(mom => mom.project).filter(Boolean))];
 
   // Filter moms based on search term and filters
-  const filteredMoms = moms.filter(mom => {
+  const filteredMoms = moms?.filter(mom => {
     const matchesSearch = mom.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          mom.project?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          mom.notes?.toLowerCase().includes(searchTerm.toLowerCase());
